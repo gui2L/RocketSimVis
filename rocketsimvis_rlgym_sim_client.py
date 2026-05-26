@@ -1,5 +1,6 @@
 import socket
 import json
+import os
 
 from rlgym_sim.utils.gamestates import GameState
 
@@ -7,6 +8,8 @@ UDP_IP = "127.0.0.1"
 UDP_PORT = 9273 # Default RocketSimVis port
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
+
+_designated_renderer_pid = None
 
 def write_physobj(physobj):
 	j = {}
@@ -33,6 +36,14 @@ def write_car(player):
 	return j
 
 def send_state_to_rocketsimvis(gs: GameState):
+	global _designated_renderer_pid
+	
+	if _designated_renderer_pid is None:
+		_designated_renderer_pid = os.getpid()
+		
+	if _designated_renderer_pid != os.getpid():
+		return
+
 	j = {}
 	
 	# Send ball

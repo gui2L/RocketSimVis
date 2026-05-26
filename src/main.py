@@ -1,4 +1,18 @@
 import os
+import sys
+
+# Mock glm to prevent DLL load failure in restricted environments
+class MockGLM:
+    class vec3:
+        def __init__(self, *args, **kwargs): pass
+    class vec4:
+        def __init__(self, *args, **kwargs): pass
+    class mat4:
+        def __init__(self, *args, **kwargs): pass
+    def __getattr__(self, name):
+        return self.vec3
+sys.modules['glm'] = MockGLM()
+
 import math
 import random
 import threading
@@ -555,6 +569,10 @@ class QRSVGLWidget(QtOpenGL.QGLWidget):
         if state.recv_interval > 0:
             ui_text += "Network rate: {:.2f}fps".format(1 / state.recv_interval) + "\n"
         ui_text += "Ball speed: {:.2f}kph".format(state.ball_state.prev_vel.length * (9 / 250)) + "\n"
+        
+        if state.ui_text:
+            ui_text += "\n" + state.ui_text + "\n"
+            
         get_ui().set_text(ui_text)
 
         ###########################################
