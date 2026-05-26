@@ -215,13 +215,20 @@ class GameState:
 
         self.gamemode = None
         self.render_state = RenderState()
+        self.ui_text = ""
 
     def is_boost_big(self, idx):
         return self.boost_pad_locations[idx].z == 73
 
     def read_from_json(self, j):
 
-        self.ball_state.read_from_json(j["ball_phys"])
+        if not (j.get("ui_text") is None):
+            self.ui_text = j["ui_text"]
+            if len(j.keys()) == 1:
+                return
+
+        if not (j.get("ball_phys") is None):
+            self.ball_state.read_from_json(j["ball_phys"])
 
         j_cars = j["cars"]
         if len(self.car_states) != len(j_cars):
