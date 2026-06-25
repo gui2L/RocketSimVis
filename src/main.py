@@ -627,7 +627,23 @@ def main():
     app = QtWidgets.QApplication([])
     ui.update_scaling_factor(app)
 
+    # Récupération de la taille de l'écran via PyQt5
+    screen_rect = app.primaryScreen().availableGeometry()
+    screen_width = screen_rect.width()
+    screen_height = screen_rect.height()
+
+    # Calculs pour le ratio 1:3
+    ctrl_width = int(screen_width * 0.25)
+    vis_width = screen_width - ctrl_width # Les 75% restants
+
     window = QRSVWindow(QRSVGLWidget(app.primaryScreen()))
+    
+    # On redimensionne la fenêtre 3D
+    window.resize(vis_width, screen_height)
+    
+    # On la déplace vers la droite (exactement là où le contrôleur s'arrête) et tout en haut (y=0)
+    window.move(ctrl_width, 0)
+    
     window.showNormal()
     app.exec_()
 
