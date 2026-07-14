@@ -116,7 +116,7 @@ class QEditConfigWidget(QWidget):
         self.config = config
 
         self.camera_group = QtWidgets.QGroupBox("Camera")
-        self.camera_group_layout = QtWidgets.QVBoxLayout(self)
+        self.camera_group_layout = QtWidgets.QVBoxLayout(self.camera_group)
         self.camera_group.setLayout(self.camera_group_layout)
         self.layout().addWidget(self.camera_group)
 
@@ -194,13 +194,11 @@ class QRSVWindow(QtWidgets.QMainWindow):
         self.gl_widget = gl_widget
         self.setCentralWidget(self.gl_widget)
 
-        self.base_layout = QtWidgets.QVBoxLayout(self)
-
         self.bar_widget = QUIBarWidget(self)
-        self.layout().addWidget(self.bar_widget)
+        self.bar_widget.setParent(self)
 
         self.edit_config_widget = QEditConfigWidget(self.gl_widget.config)
-        self.layout().addWidget(self.edit_config_widget)
+        self.edit_config_widget.setParent(self)
         self.edit_config_widget.hide()
 
         self.resize(WINDOW_SIZE_X, WINDOW_SIZE_Y)

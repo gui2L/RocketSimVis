@@ -1,5 +1,11 @@
 import os
 import sys
+import logging
+# On demande à pywavefront de se taire et de ne montrer que les vraies erreurs (ERROR)
+logging.getLogger("pywavefront").setLevel(logging.ERROR)
+
+import warnings
+warnings.filterwarnings("ignore", message="invalid value encountered in divide")
 
 # Mock glm to prevent DLL load failure in restricted environments
 class MockGLM:
@@ -41,6 +47,7 @@ from moderngl_window.meta import TextureDescription
 from PyQt5 import QtOpenGL, QtWidgets
 from PyQt5.QtCore import QSize, Qt
 from PyQt5.QtGui import QScreen, QColor
+from PyQt5.QtWidgets import QProgressBar, QLabel
 
 from OpenGL.GL import *
 from OpenGL.GLU import *
@@ -50,6 +57,11 @@ import numpy as np
 from pyrr import Quaternion, Matrix33, Matrix44, Vector3, Vector4
 
 import pywavefront
+
+import tkinter as tk
+root = tk.Tk()
+screen_width = root.winfo_screenwidth()
+screen_height = root.winfo_screenheight()
 
 # TODO: Move
 def safe_normalize(vec: pyrr.Vector3):
@@ -90,6 +102,26 @@ class QRSVGLWidget(QtOpenGL.QGLWidget):
         super(QRSVGLWidget, self).__init__(fmt, None)
 
         self.setMouseTracking(True)
+
+
+        # 1. La jauge de Boost (En bas à droite)
+        self.boost_gauge = QProgressBar(self)
+        self.boost_gauge.setRange(0, 100)
+        self.boost_gauge.setValue(33) # Valeur de test
+        self.boost_gauge.setGeometry(screen_width - 250, screen_height - 100, 200, 30)
+        self.boost_gauge.setStyleSheet("""QProgressBar { border: 2px solid grey; border-radius: 5px; text-align: center; color: white; font-weight: bold; } QProgressBar::chunk { background-color: #FFA500; } /* Orange Rocket League */""")
+
+        # 2. Le panneau de Statistiques (En haut à droite)
+        self.stats_label = QLabel("En attente des données...", self)
+        
+        # Calcul pour la position en haut à droite :
+        # La fenêtre 3D fait 75% de l'écran. On soustrait 220px (largeur du texte) et on le place à Y=20.
+        vis_width = int(screen_width * 0.75)
+        self.stats_label.setGeometry(vis_width - 220, 20, 200, 130)
+        
+        # Style : Fond noir semi-transparent, texte aligné à droite pour faire plus "pro"
+        self.stats_label.setStyleSheet("color: white; background-color: rgba(0,0,0,180); font-size: 14px; padding: 10px; border-radius: 5px;")
+        self.stats_label.setAlignment(Qt.AlignRight | Qt.AlignTop)
 
     def load_texture_2d(self, path: str) -> moderngl.Texture:
         return resources.textures.load(TextureDescription(path=path))
@@ -297,11 +329,12 @@ class QRSVGLWidget(QtOpenGL.QGLWidget):
                 height = self.config.camera_height.val
                 dist = self.config.camera_distance.val
 
-                ball_cam_offset_dir = safe_normalize(safe_normalize(ball_pos - car_pos) * Vector3((1, 1, 0))).normalized
+                ball_cam_offset_dir = safe_normalize(safe_normalize(ball_pos - car_pos) * Vector3((1, 1, 0)))
 
                 # As we tilt up, move the camera down
                 lean_scale = safe_normalize(ball_pos - car_pos).z
-                height_clamp = abs(ball_pos.z - car_pos.z) / self.config.camera_lean_min_height_clamp.val
+                #height_clamp = abs(ball_pos.z - car_pos.z) / self.config.camera_lean_min_height_clamp.val
+                height_clamp = abs(ball_pos.z - car_pos.z) / max(self.config.camera_lean_min_height_clamp.val, 1e-6)
                 if lean_scale > 0:
                     height *= 1 - min(lean_scale * self.config.camera_lean_height_scale.val, height_clamp)
 
@@ -562,19 +595,47 @@ class QRSVGLWidget(QtOpenGL.QGLWidget):
             self.ctx.enable(moderngl.DEPTH_TEST)
 
         ###########################################
-
-        ui_text = ""
-        ui_text += "Render FPS: {}".format(self.last_fps) + "\n"
-        ui_text += "Connected: {}".format(state.recv_time > 0) + "\n"
-        if state.recv_interval > 0:
-            ui_text += "Network rate: {:.2f}fps".format(1 / state.recv_interval) + "\n"
-        ui_text += "Ball speed: {:.2f}kph".format(state.ball_state.prev_vel.length * (9 / 250)) + "\n"
+        car_speed_kmh = 0
+        ball_speed_kmh = 0
+        current_boost = 0
         
-        if state.ui_text:
-            ui_text += "\n" + state.ui_text + "\n"
+        if len(state.car_states) > 0:
+            car = state.car_states[0] # On cible le joueur principal
             
-        get_ui().set_text(ui_text)
+            # Calcul des vitesses
+            car_speed_kmh = int(car.phys.get_vel(interp_ratio).length * 0.036)
+            ball_speed_kmh = int(state.ball_state.get_vel(interp_ratio).length * 0.036)
+            
+            # Mise à jour de la jauge de Boost
+            current_boost = int(getattr(car, 'boost', getattr(car, 'boost_amount', 0)))
+            self.boost_gauge.setValue(current_boost)
+            
+            if current_boost < 12:
+                self.boost_gauge.setStyleSheet("""QProgressBar { border: 2px solid grey; border-radius: 5px; text-align: center; color: white; font-weight: bold; } QProgressBar::chunk { background-color: #EF4444; }""")
+            else:
+                self.boost_gauge.setStyleSheet("""QProgressBar { border: 2px solid grey; border-radius: 5px; text-align: center; color: white; font-weight: bold; } QProgressBar::chunk { background-color: #FFA500; }""")
+        
+        # 3. Construction du texte unifié
+        ui_text = f"Render FPS: {self.last_fps}\n"
+        #ui_text += f"Connected: {state.recv_time > 0}\n"
 
+
+        if car_speed_kmh >= 79: # 79 km/h correspond au seuil Supersonic
+            ui_text += f"\n🏎️ Voiture: {car_speed_kmh} km/h ⚡\n"
+        else:
+            ui_text += f"\n🏎️ Voiture: {car_speed_kmh} km/h\n"
+
+        ui_text += f"⚽ Balle: {ball_speed_kmh} km/h\n"
+        ui_text += f"🔥 Boost: {current_boost} %"
+
+        if state.ui_text:
+            ui_text += "\n\n" + state.ui_text
+            
+        # On met à jour NOTRE nouvelle étiquette en haut à droite
+        self.stats_label.setText(ui_text)
+        
+        # ---> TRÈS IMPORTANT : On DÉSACTIVE l'ancienne interface <---
+        # get_ui().set_text(ui_text) 
         ###########################################
 
         self.prev_interp_ratio = interp_ratio

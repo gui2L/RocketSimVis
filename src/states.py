@@ -99,7 +99,9 @@ class PhysState:
     def get_forward(self, interp_ratio):
         if self.has_rot:
             if not self.is_teleporting():
-                return (self.prev_forward + (self.next_forward - self.prev_forward) * interp_ratio).normalized
+                vec = self.prev_forward + (self.next_forward - self.prev_forward) * interp_ratio
+                # On ne normalise que si le vecteur n'est pas nul, sinon on renvoie l'ancien
+                return vec.normalized if vec.length > 1e-6 else self.prev_forward
             else:
                 return self.prev_forward
         else:
@@ -108,7 +110,8 @@ class PhysState:
     def get_up(self, interp_ratio):
         if self.has_rot:
             if not self.is_teleporting():
-                return (self.prev_up + (self.next_up - self.prev_up) * interp_ratio).normalized
+                vec = self.prev_up + (self.next_up - self.prev_up) * interp_ratio
+                return vec.normalized if vec.length > 1e-6 else self.prev_up
             else:
                 return self.prev_up
         else:
@@ -161,7 +164,10 @@ class CarState:
         if not (j.get("controls") is None):
             self.controls.read_from_json(j["controls"])
 
-        self.is_boosting = j["boost_amount"] < self.boost_amount
+        if "is_boosting" in j:
+            self.is_boosting = j["is_boosting"]
+        else:
+            self.is_boosting = j["boost_amount"] < self.boost_amount
         self.boost_amount = j["boost_amount"]
         self.on_ground = j["on_ground"]
         if not (j.get("has_flipped_or_double_jumped") is None):
