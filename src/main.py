@@ -1,13 +1,11 @@
 import os
 import sys
 import logging
-# On demande à pywavefront de se taire et de ne montrer que les vraies erreurs (ERROR)
 logging.getLogger("pywavefront").setLevel(logging.ERROR)
 
 import warnings
 warnings.filterwarnings("ignore", message="invalid value encountered in divide")
 
-# Mock glm to prevent DLL load failure in restricted environments
 class MockGLM:
     class vec3:
         def __init__(self, *args, **kwargs): pass
@@ -84,8 +82,6 @@ class QRSVGLWidget(QtOpenGL.QGLWidget):
         self.last_fps = 0
         self.prev_state = None # type: GameState
 
-        ########################################################################
-
         self.samples = 4
 
         fmt = QtOpenGL.QGLFormat()
@@ -104,25 +100,18 @@ class QRSVGLWidget(QtOpenGL.QGLWidget):
 
         self.setMouseTracking(True)
 
-
-        # 1. La jauge de Boost (En bas à droite)
         self.boost_gauge = QProgressBar(self)
     
-        # 2. Le panneau de Statistiques (En haut à droite)
         self.stats_label = QLabel("En attente des données...", self)
         
-        
 
-    # ---> NOUVEAU : Repositionnement automatique de l'interface <---
     def resizeEvent(self, event):
         super().resizeEvent(event)
         w = event.size().width()
         h = event.size().height()
         
-        # La jauge reste en bas à droite (à 50px du bas)
         self.boost_gauge.setGeometry(w - 220, h - 50, 200, 30)
         
-        # Les stats restent en haut à droite (à 20px du haut)
         self.stats_label.setGeometry(w - 220, 20, 200, 130)
 
     def load_texture_2d(self, path: str) -> moderngl.Texture:
@@ -132,8 +121,6 @@ class QRSVGLWidget(QtOpenGL.QGLWidget):
 
         self.ctx = moderngl.create_context()
         moderngl_window.activate_context(None, self.ctx)
-
-        ##########################################
 
         print("Creating shader programs...")
 
@@ -162,8 +149,6 @@ class QRSVGLWidget(QtOpenGL.QGLWidget):
         self.pra_m_model = self.prog_arena['m_model']
         self.pra_ball_pos = self.prog_arena['ballPos']
 
-        ##########################################
-
         self.ball_ribbon = RibbonEmitter()
         self.car_ribbons = []
 
@@ -191,8 +176,6 @@ class QRSVGLWidget(QtOpenGL.QGLWidget):
         self.t_black = self.load_texture_2d(DATA_DIR_PATH + "T_Black.png")
         self.t_none = self.load_texture_2d(DATA_DIR_PATH + "T_None.png")
 
-        ############################################
-
         # Make ribbon mesh
         self.ribbon_max_verts = 1000
         self.ribbon_verts = np.random.randn(self.ribbon_max_verts * 3) * 100
@@ -207,12 +190,8 @@ class QRSVGLWidget(QtOpenGL.QGLWidget):
         self.lines_vao = self.ctx.simple_vertex_array(self.prog, self.lines_vbo, "in_position")
         self.vaos['render_lines'] = self.lines_vao
 
-        ############################################
-
         # Auto-enable multisampling if we have multiple samples
         self.ctx.multisample = self.samples > 1
-
-        ############################################
 
         print("Done.")
 
@@ -320,7 +299,6 @@ class QRSVGLWidget(QtOpenGL.QGLWidget):
         if mode != 'manual' and len(state.car_states) > 0:
             current_ball_pos = state.ball_state.get_pos(interp_ratio)
             
-            # --- MODE 1 : Auto-Director Global (Joueur le plus PROCHE) ---
             if mode == 'director':
                 current_dist = float('inf')
                 if 0 <= self.spectate_idx < len(state.car_states):
@@ -340,15 +318,13 @@ class QRSVGLWidget(QtOpenGL.QGLWidget):
                         current_dist = dist
                         
                 self.spectate_idx = best_idx
-                
-            # --- MODE 2 & 3 : Dynamique Équipe (Joueur le plus LOIN) ---
+
             elif mode in ('far_blue', 'far_orange'):
                 target_team = 0 if mode == 'far_blue' else 1
                 
                 current_dist = -1
                 best_idx = -1
                 
-                # Récupère la distance de la cible actuelle (si elle est valide)
                 if 0 <= self.spectate_idx < len(state.car_states):
                     current_player = state.car_states[self.spectate_idx]
                     if not current_player.is_demoed and current_player.team_num == target_team:
@@ -363,7 +339,6 @@ class QRSVGLWidget(QtOpenGL.QGLWidget):
                         
                     dist = (player.phys.get_pos(interp_ratio) - current_ball_pos).length
                     
-                    # Le nouveau joueur doit être significativement PLUS LOIN
                     if best_idx == -1 or dist > (current_dist + SWITCH_THRESHOLD):
                         best_idx = i
                         current_dist = dist
@@ -387,17 +362,12 @@ class QRSVGLWidget(QtOpenGL.QGLWidget):
                 height = self.config.camera_height.val
                 dist = self.config.camera_distance.val
 
-                # --- CORRECTION DE LA CAMÉRA SOUS LA BALLE ---
                 horizontal_diff = (ball_pos - car_pos) * Vector3((1, 1, 0))
                 
-                # Si la balle est pile au-dessus (différence horizontale presque nulle)
                 if horizontal_diff.length < 5.0:
-                    # La caméra se rabat sur l'orientation (le dos) de la voiture
                     ball_cam_offset_dir = safe_normalize(car_forward * Vector3((1, 1, 0)))
                 else:
-                    # Comportement normal
                     ball_cam_offset_dir = safe_normalize(horizontal_diff)
-                # ---------------------------------------------
 
                 # As we tilt up, move the camera down
                 lean_scale = safe_normalize(ball_pos - car_pos).z
@@ -516,15 +486,10 @@ class QRSVGLWidget(QtOpenGL.QGLWidget):
 
         camera_pos, camera_target_pos, camera_fov = self.calc_camera_state(state, interp_ratio, delta_time)
         
-        # ---> LE CORRECTIF ULTIME ANTI-GIMBAL LOCK <---
-        # On calcule la direction du regard de la caméra
         view_dir = camera_target_pos - camera_pos
         
-        # Si la caméra regarde PARFAITEMENT à la verticale (X et Y sont à zéro)
         if abs(view_dir[0]) < 0.001 and abs(view_dir[1]) < 0.001:
-            # On ajoute un micro-décalage invisible à l'œil nu pour casser l'alignement parfait
             camera_target_pos[0] += 0.001
-        # ----------------------------------------------
         
         proj = Matrix44.perspective_projection(camera_fov, -width/height, 0.1, 50 * 1000.0)
         lookat = Matrix44.look_at(
@@ -566,8 +531,6 @@ class QRSVGLWidget(QtOpenGL.QGLWidget):
             self.render_model(
                 ball_pos,
                 ball_phys.get_forward(interp_ratio), ball_phys.get_up(interp_ratio), 'Ball.obj', self.t_ball,
-
-                #outline_color = Vector4((1, 1, 1, 1))
             )
 
             if state.gamemode == "heatseeker": # Update and render ball ribbon
@@ -693,22 +656,18 @@ class QRSVGLWidget(QtOpenGL.QGLWidget):
                 self.spectate_idx = -1
 
     def keyPressEvent(self, event):
-        # Touche C : Bascule Réalisateur Global (Proche)
         if event.key() == Qt.Key_C:
             self.dynamic_cam_mode = 'manual' if getattr(self, 'dynamic_cam_mode', 'manual') == 'director' else 'director'
             print(f"Caméra : {'Auto-Director (Closest)' if self.dynamic_cam_mode == 'director' else 'Manuelle'}")
 
-        # Touche B : Bascule Dynamique Bleu (Loin)
         elif event.key() == Qt.Key_B:
             self.dynamic_cam_mode = 'manual' if getattr(self, 'dynamic_cam_mode', 'manual') == 'far_blue' else 'far_blue'
             print(f"Caméra : {'2nd Man Bleu (Furthest)' if self.dynamic_cam_mode == 'far_blue' else 'Manuelle'}")
 
-        # Touche O : Bascule Dynamique Orange (Loin)
         elif event.key() == Qt.Key_O:
             self.dynamic_cam_mode = 'manual' if getattr(self, 'dynamic_cam_mode', 'manual') == 'far_orange' else 'far_orange'
             print(f"Caméra : {'2nd Man Orange (Furthest)' if self.dynamic_cam_mode == 'far_orange' else 'Manuelle'}")
 
-        # Touche P : Fixe le joueur le plus proche manuellement
         elif event.key() == Qt.Key_P:
             self.dynamic_cam_mode = 'manual'
             if not (self.prev_state is None):
@@ -732,7 +691,6 @@ def run_socket_thread(port):
     g_socket_listener.run(port)
 
 def main():
-    #cmd_args = arg_parser.parse_args()
     port = 9273
     
     print("Starting RocketSimVis...")
@@ -746,30 +704,23 @@ def main():
     app = QtWidgets.QApplication([])
     ui.update_scaling_factor(app)
 
-    # Récupération de la taille de l'écran via PyQt5
     screen_rect = app.primaryScreen().availableGeometry()
     screen_width = screen_rect.width()
     screen_height = screen_rect.height()
 
-    # Calculs pour le ratio 1:3
-    # Calculs pour l'espace alloué
     ctrl_width = int(screen_width * 0.25)
-    vis_width = screen_width - ctrl_width # Les 75% restants
+    vis_width = screen_width - ctrl_width 
     
-    # ---> CORRECTION DU SOL : Calcul de la hauteur pour un vrai ratio 16:9
     vis_height = int(vis_width * (9 / 16))
     
-    # Sécurité : Si l'écran est très large et que la hauteur 16:9 dépasse l'écran
     if vis_height > screen_height:
         vis_height = screen_height
         vis_width = int(vis_height * (16 / 9))
 
     window = QRSVWindow(QRSVGLWidget(app.primaryScreen()))
     
-    # On redimensionne avec le ratio parfait
     window.resize(vis_width, vis_height)
     
-    # On centre la fenêtre 3D verticalement pour que ce soit esthétique
     y_pos = (screen_height - vis_height) // 2
     window.move(ctrl_width, max(0, y_pos))
     
